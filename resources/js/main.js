@@ -120,3 +120,129 @@ function addItemToDOM(text, completed) {
 
   list.insertBefore(item, list.childNodes[0]);
 }
+
+// 选择元素
+const input = document.getElementById('item');
+const addBtn = document.getElementById('add');
+
+// 监听输入框的回车键
+input.addEventListener('keydown', (e) => {
+  // 兼容中文输入法：正在组字时直接返回
+  if (e.isComposing || e.keyCode === 229) return;
+
+  if (e.key === 'Enter' || e.keyCode === 13) {
+    e.preventDefault();        // 防止可能的默认提交/换行
+    addBtn.click();            // 复用原来“添加”按钮的逻辑
+    // 可选： 添加后继续聚焦，方便连续输入
+    setTimeout(() => input.focus(), 0);
+  }
+});
+
+
+// —— Eisenhower 四象限：工具条 + 自动归类 ——
+(function(){
+  const src   = document.getElementById('todo');   // 中转站（隐藏）
+  const input = document.getElementById('item');   // 原输入框
+  const add   = document.getElementById('add');    // 原“＋”按钮
+  const lists = {
+    "1": document.getElementById('q1'),
+    "2": document.getElementById('q2'),
+    "3": document.getElementById('q3'),
+    "4": document.getElementById('q4'),
+  };
+  if (!src || !input || !add || !lists["1"]) return;
+
+  let lastQ = "2";       // Enter 的默认象限
+  let pendingQ = "2";    // 下一条要放的象限
+
+  // 监听四个按钮
+  document.querySelectorAll('.qbtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const q = btn.dataset.q || "2";
+      if (!input.value.trim()) { input.focus(); return; }
+      pendingQ = q;
+      lastQ = q;
+      add.click();       // 复用原来的添加流程
+    });
+  });
+
+  // 如果你之前已实现“回车添加”，这段只负责设置 pendingQ，不触发二次添加
+  input.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' || e.keyCode === 13) {
+      pendingQ = lastQ;  // 用上一次选择的象限
+    }
+  });
+
+  // 观察 #todo：一旦有新 <li>，立刻搬到指定象限并加徽标
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(li => {
+      if (li.nodeType !== 1 || li.tagName !== 'LI') return;
+      // 徽标
+      if (!li.querySelector('.q-badge')) {
+        const b = document.createElement('span');
+        b.className = 'q-badge';
+        b.textContent = ['Q1','Q2','Q3','Q4'][Number(pendingQ)-1] || 'Q2';
+        li.insertBefore(b, li.firstChild);
+      }
+      // 搬运（插到该象限的最上面）
+      const target = lists[pendingQ] || lists["2"];
+      target.insertBefore(li, target.firstChild);
+    }));
+  });
+  mo.observe(src, { childList: true });
+})();
+
+// 四象限：每个象限有自己的输入框，复用原 main.js 的创建逻辑
+(function(){
+  const staging = document.getElementById('todo');   // 原未完成列表（隐藏，中转用）
+  const mainInp = document.getElementById('item');   // 原 header 输入框（隐藏）
+  const addBtn  = document.getElementById('add');    // 原 “+” 按钮（隐藏）
+  const targets = {
+    q1: document.getElementById('q1'),
+    q2: document.getElementById('q2'),
+    q3: document.getElementById('q3'),
+    q4: document.getElementById('q4'),
+  };
+  if (!staging || !mainInp || !addBtn) return;
+
+  // 监听四个象限表单：回车或点击加号都会触发
+  document.querySelectorAll('.q-form').forEach(form => {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = form.querySelector('.q-input');
+      const text  = (input.value || '').trim();
+      if (!text) return;
+
+      // 1) 把文字塞进原输入框，触发原有创建流程
+      mainInp.value = text;
+      // 告诉观察者：这次属于哪个象限
+      staging.dataset.pendingTarget = form.dataset.target || 'q2';
+      addBtn.click();
+
+      input.value = '';
+      input.focus();
+    });
+  });
+
+  // 2) 观察 #todo：新 <li> 生成后，搬到对应象限，并加徽标
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => m.addedNodes.forEach(li => {
+      if (li.nodeType !== 1 || li.tagName !== 'LI') return;
+      const targetKey = staging.dataset.pendingTarget || 'q2';
+      const target = targets[targetKey] || targets.q2;
+
+      // 徽标（只加一次）
+      if (!li.querySelector('.q-badge')) {
+        const b = document.createElement('span');
+        b.className = 'q-badge';
+        b.textContent = {q1:'Q1', q2:'Q2', q3:'Q3', q4:'Q4'}[targetKey] || 'Q2';
+        li.insertBefore(b, li.firstChild);
+      }
+
+      // 挪到象限列表（放最上面）
+      target.insertBefore(li, target.firstChild);
+    }));
+  });
+  mo.observe(staging, { childList: true });
+})();
